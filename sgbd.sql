@@ -116,3 +116,15 @@ exception
     when no_data_found then
         dbms_output.put_line('Userul nu este profesor/nu exista');
 end;
+--6 Insereaza un nou user cu rolul de student cu id-ul 1
+declare
+    INSERT_EXCP EXCEPTION;
+    PRAGMA EXCEPTION_INIT (INSERT_EXCP, -00001);
+begin
+    insert into SIT_USER values (1, 'student', 'fdsfds', 1);
+    commit;
+exception
+    when INSERT_EXCP then
+        dbms_output.put_line('Nu s-a putut insera userul');
+end;
+--7. 
