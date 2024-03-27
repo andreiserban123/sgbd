@@ -116,6 +116,7 @@ exception
     when no_data_found then
         dbms_output.put_line('Userul nu este profesor/nu exista');
 end;
+--Tema 2
 --6 Insereaza un nou user cu rolul de student cu id-ul 1
 declare
     INSERT_EXCP EXCEPTION;
