@@ -378,3 +378,114 @@ end;
 
 select *
 from SIT_PERSON;
+
+--Tema triggeri
+--16. Creeza o tabela de audit pentru catalog care salveaza orice nota stearsa + logs
+
+create table SIT_CATALOGUE$
+(
+    ID         NUMBER,
+    NOTA       NUMBER,
+    ID_STUDENT NUMBER,
+    ID_MATERIE NUMBER,
+    DATA_NOTA  DATE,
+    UPDATED_BY VARCHAR2(100),
+    UPDATED_AT TIMESTAMP
+);
+
+create or replace trigger SIT_CATALOGUE_TRG
+    before delete
+    on SIT_CATALOGUE
+    for each row
+declare
+    PRAGMA Autonomous_Transaction ;
+begin
+    insert into SIT_CATALOGUE$
+    values (:old.ID,
+            :old.NOTA,
+            :old.ID_STUDENT,
+            :old.ID_MATERIE,
+            :old.DATA_NOTA,
+            SYS_CONTEXT('USERENV', 'SESSION_USER'),
+            SYSTIMESTAMP);
+    commit;
+exception
+    when others then
+        rollback;
+        raise_application_error(-2000, 'ERROR trigger sit_catalogue');
+end;
+/
+
+delete
+from SIT_CATALOGUE
+where id = 236;
+/
+
+
+select *
+from SIT_CATALOGUE$;
+/
+
+--17.Un trigger care verifica nota sa fie in limite corecte
+CREATE OR REPLACE TRIGGER Enforce_Min_Grade_trg
+    BEFORE INSERT OR UPDATE OF NOTA
+    ON SIT_CATALOGUE
+    FOR EACH ROW
+BEGIN
+    IF :new.NOTA > 10 THEN
+        :new.NOTA := 10;
+    ELSIF :new.NOTA < 1 THEN
+        :new.NOTA := 1;
+    END IF;
+END;
+/
+
+
+insert into SIT_CATALOGUE
+values (SIT_CATALOGUE_SEQ.nextval, 11, 10, 1, trunc(sysdate));
+
+select *
+from SIT_CATALOGUE
+order by DATA_NOTA desc;
+
+--18. Un trigger care verifica daca parintele are varsta mai mare de 18 ani
+
+create or replace trigger check_parent_age
+    before insert
+    on SIT_USER_ROLES
+    for each row
+declare
+    v_age number;
+begin
+    if :new.ID_ROLE != 3 then
+        return;
+    end if;
+    select extract(year from sysdate) - extract(year from B_DAY)
+    into v_age
+    from SIT_PERSON
+    where ID = (select ID_PERS from SIT_USER where ID = :new.ID_USER);
+    if v_age < 18 then
+        raise_application_error(-2000, 'Parintele trebuie sa aiba varsta mai mare de 18 ani');
+    end if;
+end;
+/
+
+insert into SIT_PERSON
+values (102, 'Ion', 'Popescu', to_date('12-12-2010', 'dd-mm-yyyy'), 1, '2234567890123', '0756789876');
+/
+insert into SIT_USER
+values (102, 'ionpopescu', '123456', 102);
+/
+insert into SIT_USER_ROLES
+values (101, 102, 3);
+
+
+select *
+from SIT_USER_ROLES;
+
+
+delete
+from SIT_USER_ROLES
+where ID = 102;
+
+
