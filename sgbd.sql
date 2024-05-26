@@ -216,3 +216,276 @@ exception
         DBMS_OUTPUT.PUT_LINE(sqlerrm);
 end;
 /
+--10. get_medie a unui student
+CREATE OR REPLACE FUNCTION get_medie(p_id_stud NUMBER)
+    RETURN NUMBER IS
+    v_media NUMBER;
+BEGIN
+    SELECT AVG(NOTA)
+    INTO v_media
+    FROM SIT_CATALOGUE
+    WHERE ID_STUDENT = p_id_stud;
+
+    RETURN v_media;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN NULL;
+    WHEN OTHERS THEN
+        RAISE;
+END get_medie;
+/
+
+select GET_MEDIE(32)
+from DUAL;
+/
+
+-- Scrie o functie care intoarce data nasterii unui student
+
+CREATE OR REPLACE FUNCTION get_birth_date(p_id_stud NUMBER)
+    RETURN DATE IS
+    v_birth_date DATE;
+BEGIN
+    SELECT B_DAY
+    INTO v_birth_date
+    FROM SIT_PERSON
+    WHERE ID = (SELECT ID_PERS FROM SIT_USER WHERE ID = p_id_stud);
+
+    RETURN v_birth_date;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN NULL;
+    WHEN OTHERS THEN
+        RAISE;
+END get_birth_date;
+/
+
+select GET_BIRTH_DATE(32)
+from dual;
+
+-- 12. Scrie o functie care da un feedback per materie
+CREATE OR REPLACE FUNCTION get_average_grade_message(p_id_stud NUMBER, p_subject_name VARCHAR2)
+    RETURN VARCHAR2 IS
+    v_average_grade NUMBER;
+BEGIN
+    SELECT AVG(NOTA)
+    INTO v_average_grade
+    FROM SIT_CATALOGUE
+    WHERE ID_STUDENT = p_id_stud
+      AND ID_MATERIE = (SELECT id FROM SIT_MATERII WHERE upper(NAME) = upper(p_subject_name));
+
+    IF v_average_grade >= 9 THEN
+        RETURN 'Excellent';
+    ELSIF v_average_grade >= 7 THEN
+        RETURN 'Good';
+    ELSE
+        RETURN 'Needs Improvement';
+    END IF;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN 'No grades found';
+    WHEN OTHERS THEN
+        RAISE;
+END get_average_grade_message;
+/
+
+SELECT get_average_grade_message(10, 'Matematica')
+FROM dual;
+/
+
+
+SELECT get_subject_average(10, 'Matematica')
+FROM dual;
+/
+
+
+CREATE OR REPLACE FUNCTION get_subject_average(p_id_stud NUMBER, p_subject_name VARCHAR2)
+    RETURN NUMBER IS
+    v_average_grade NUMBER;
+BEGIN
+    SELECT AVG(NOTA)
+    INTO v_average_grade
+    FROM SIT_CATALOGUE
+    WHERE ID_STUDENT = p_id_stud
+      AND ID_MATERIE = (SELECT id FROM SIT_MATERII WHERE upper(NAME) = upper(p_subject_name));
+
+    RETURN v_average_grade;
+EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+        RETURN NULL;
+    WHEN OTHERS THEN
+        RAISE;
+END get_subject_average;
+/
+
+--13 Procedura pentru a insera unei noi persoane
+
+CREATE OR REPLACE PROCEDURE insert_person(p_f_name VARCHAR2, p_l_name VARCHAR2, p_b_day DATE, p_telefon VARCHAR2,
+                                          p_CNP VARCHAR2,
+                                          p_id_address NUMBER)
+    IS
+    v_id number;
+BEGIN
+    select max(id) + 1 into v_id from SIT_PERSON;
+    INSERT INTO SIT_PERSON VALUES (v_id, p_f_name, p_l_name, p_b_day, p_id_address, p_CNP, p_telefon);
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+END insert_person;
+/
+--test
+
+begin
+    insert_person('Ion', 'Popescu', to_date('12-12-1990', 'dd-mm-yyyy'), '0756789876', '1234567890123', 1);
+end;
+
+--14. Procedura pentru a sterge o persoana
+CREATE OR REPLACE PROCEDURE delete_person(p_id_pers NUMBER)
+    IS
+BEGIN
+    DELETE FROM SIT_PERSON WHERE ID = p_id_pers;
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+END delete_person;
+--test
+begin
+    delete_person(101);
+end;
+
+--15. Procedura pentru a modifica numele unei persoane
+CREATE OR REPLACE PROCEDURE update_person_name(p_id_pers NUMBER, p_f_name VARCHAR2, p_l_name VARCHAR2)
+    IS
+BEGIN
+    UPDATE SIT_PERSON
+    SET F_NAME = p_f_name,
+        L_NAME = p_l_name
+    WHERE ID = p_id_pers;
+    COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        RAISE;
+END update_person_name;
+/
+--test
+begin
+    update_person_name(101, 'Ioana', 'Munteanu');
+end;
+
+select *
+from SIT_PERSON;
+
+--Tema triggeri
+--16. Creeza o tabela de audit pentru catalog care salveaza orice nota stearsa + logs
+
+create table SIT_CATALOGUE$
+(
+    ID         NUMBER,
+    NOTA       NUMBER,
+    ID_STUDENT NUMBER,
+    ID_MATERIE NUMBER,
+    DATA_NOTA  DATE,
+    UPDATED_BY VARCHAR2(100),
+    UPDATED_AT TIMESTAMP
+);
+
+create or replace trigger SIT_CATALOGUE_TRG
+    before delete
+    on SIT_CATALOGUE
+    for each row
+declare
+    PRAGMA Autonomous_Transaction ;
+begin
+    insert into SIT_CATALOGUE$
+    values (:old.ID,
+            :old.NOTA,
+            :old.ID_STUDENT,
+            :old.ID_MATERIE,
+            :old.DATA_NOTA,
+            SYS_CONTEXT('USERENV', 'SESSION_USER'),
+            SYSTIMESTAMP);
+    commit;
+exception
+    when others then
+        rollback;
+        raise_application_error(-2000, 'ERROR trigger sit_catalogue');
+end;
+/
+
+delete
+from SIT_CATALOGUE
+where id = 236;
+/
+
+
+select *
+from SIT_CATALOGUE$;
+/
+
+--17.Un trigger care verifica nota sa fie in limite corecte
+CREATE OR REPLACE TRIGGER Enforce_Min_Grade_trg
+    BEFORE INSERT OR UPDATE OF NOTA
+    ON SIT_CATALOGUE
+    FOR EACH ROW
+BEGIN
+    IF :new.NOTA > 10 THEN
+        :new.NOTA := 10;
+    ELSIF :new.NOTA < 1 THEN
+        :new.NOTA := 1;
+    END IF;
+END;
+/
+
+
+insert into SIT_CATALOGUE
+values (SIT_CATALOGUE_SEQ.nextval, 11, 10, 1, trunc(sysdate));
+
+select *
+from SIT_CATALOGUE
+order by DATA_NOTA desc;
+
+--18. Un trigger care verifica daca parintele are varsta mai mare de 18 ani
+
+create or replace trigger check_parent_age
+    before insert
+    on SIT_USER_ROLES
+    for each row
+declare
+    v_age number;
+begin
+    if :new.ID_ROLE != 3 then
+        return;
+    end if;
+    select extract(year from sysdate) - extract(year from B_DAY)
+    into v_age
+    from SIT_PERSON
+    where ID = (select ID_PERS from SIT_USER where ID = :new.ID_USER);
+    if v_age < 18 then
+        raise_application_error(-2000, 'Parintele trebuie sa aiba varsta mai mare de 18 ani');
+    end if;
+end;
+/
+
+insert into SIT_PERSON
+values (102, 'Ion', 'Popescu', to_date('12-12-2010', 'dd-mm-yyyy'), 1, '2234567890123', '0756789876');
+/
+insert into SIT_USER
+values (102, 'ionpopescu', '123456', 102);
+/
+insert into SIT_USER_ROLES
+values (101, 102, 3);
+
+
+select *
+from SIT_USER_ROLES;
+
+
+delete
+from SIT_USER_ROLES
+where ID = 102;
+
+
