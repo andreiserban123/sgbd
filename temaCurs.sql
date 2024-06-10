@@ -8,6 +8,7 @@ BEGIN
         exit when v_ref%notfound;
         dbms_output.put_line(v_angajat.nume || ' ' || v_angajat.prenume);
     end loop;
+    close v_ref;
 END;
 /
 
