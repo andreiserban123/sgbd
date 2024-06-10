@@ -1,0 +1,5 @@
+username: NUMEP_xx    (vezi PDF)
+password: STUD
+hostname: 193.226.34.57
+port: 1521
+service_name: orclpdb.docker.internal
